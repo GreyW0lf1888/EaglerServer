@@ -3,44 +3,43 @@ const net = require('net');
 
 const PORT = process.env.PORT || 10000;
 const TARGET_IP = process.env.SERVER_ADDR;
-const TARGET_PORT = process.env.SERVER_PORT;
+const TARGET_PORT = parseInt(process.env.SERVER_PORT || "22104");
 const SERVER_NAME = process.env.SERVERNAME || "Eaglercraft Server";
-const MOTD_TEXT = process.env.MOTD || "Welcome to our server!";
+const MOTD_TEXT = process.env.MOTD || "Online and Ready!";
 
 if (!TARGET_IP || !TARGET_PORT) {
-    console.error("CRITICAL ERROR: SERVER_ADDR and SERVER_PORT environment variables must be defined on Render!");
+    console.error("CRITICAL: SERVER_ADDR and SERVER_PORT must be defined!");
     process.exit(1);
 }
 
 const wss = new WebSocket.Server({ port: PORT });
-console.log(`Eaglercraft Custom Proxy Active on port ${PORT}`);
-console.log(`Routing to FalixNodes backend at: ${TARGET_IP}:${TARGET_PORT}`);
+console.log(`Eaglercraft Translation Proxy running on port ${PORT}`);
 
 wss.on('connection', (ws) => {
     const tcpClient = new net.Socket();
-    let isConnected = false;
+    let handshakeCompleted = false;
 
     tcpClient.connect(TARGET_PORT, TARGET_IP, () => {
-        isConnected = true;
+        console.log('Connected to Falix backend.');
     });
 
     ws.on('message', (message) => {
-        // Intercepts the Eaglercraft browser server list ping handshake
         const msgStr = message.toString();
+        
+        // Handle Eaglercraft Server List Ping
         if (msgStr.includes("Accept: Motd") || msgStr.trim() === "00") {
-            const customResponse = JSON.stringify({
+            const pingResponse = JSON.stringify({
                 name: SERVER_NAME,
                 motd: [MOTD_TEXT],
                 online: 1,
-                max: 100
+                max: 20
             });
-            if (ws.readyState === WebSocket.OPEN) {
-                ws.send(customResponse);
-            }
+            if (ws.readyState === WebSocket.OPEN) ws.send(pingResponse);
             return;
         }
 
-        if (isConnected && tcpClient.writable) {
+        // Forward game traffic downstream
+        if (tcpClient.writable) {
             tcpClient.write(message);
         }
     });
@@ -55,3 +54,4 @@ wss.on('connection', (ws) => {
     tcpClient.on('close', () => ws.close());
     tcpClient.on('error', () => ws.close());
 });
+
